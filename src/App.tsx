@@ -6,8 +6,15 @@ import LoginPage from '@/pages/LoginPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import DashboardPage from '@/pages/DashboardPage'
+import AssetsPage from '@/pages/AssetsPage'
+import AssetDetailPage from '@/pages/AssetDetailPage'
+import AssetFormPage from '@/pages/AssetFormPage'
+import ScanPage from '@/pages/ScanPage'
+import LoansPage from '@/pages/LoansPage'
+import MaintenancePage from '@/pages/MaintenancePage'
+import ReportsPage from '@/pages/ReportsPage'
+import MasterDataPage from '@/pages/MasterDataPage'
 import MorePage from '@/pages/MorePage'
-import ComingSoonPage from '@/pages/ComingSoonPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 function ConfigWarning() {
@@ -27,23 +34,27 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+        {/* Semua role (Admin, Staf, Viewer). Tombol tambah/ubah di dalam halaman sudah dibatasi per role. */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/assets" element={<ComingSoonPage title="Aset" stage={4} />} />
-            <Route path="/scan" element={<ComingSoonPage title="Scan QR" stage={4} />} />
-            <Route path="/loans" element={<ComingSoonPage title="Peminjaman" stage={5} />} />
-            <Route path="/maintenance" element={<ComingSoonPage title="Perawatan" stage={5} />} />
-            <Route path="/reports" element={<ComingSoonPage title="Laporan" stage={5} />} />
+            <Route path="/assets" element={<AssetsPage />} />
+            <Route path="/assets/:id" element={<AssetDetailPage />} />
+            <Route path="/scan" element={<ScanPage />} />
+            <Route path="/loans" element={<LoansPage />} />
+            <Route path="/maintenance" element={<MaintenancePage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="/more" element={<MorePage />} />
           </Route>
         </Route>
 
-        {/* Master data hanya untuk Admin & Staf */}
+        {/* Hanya Admin & Staf */}
         <Route element={<ProtectedRoute allowedRoles={['admin', 'staff']} />}>
           <Route element={<AppLayout />}>
-            <Route path="/master" element={<ComingSoonPage title="Master Data" stage={4} />} />
+            <Route path="/assets/new" element={<AssetFormPage />} />
+            <Route path="/assets/:id/edit" element={<AssetFormPage />} />
+            <Route path="/master" element={<MasterDataPage />} />
           </Route>
         </Route>
 

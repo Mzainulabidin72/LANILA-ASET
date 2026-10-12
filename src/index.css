@@ -35,3 +35,10 @@
 }
 
 .pb-nav { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+
+/* ---- Cetak label QR: saat print, seluruh aplikasi (#root) disembunyikan, hanya #print-area tampil ---- */
+@page { margin: 8mm; }
+@media print {
+  #root { display: none !important; }
+  body { background: #fff !important; }
+}

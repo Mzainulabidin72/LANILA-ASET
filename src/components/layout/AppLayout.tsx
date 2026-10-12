@@ -5,9 +5,11 @@ import Logo from '@/components/ui/Logo'
 import InstallBanner from '@/components/pwa/InstallBanner'
 import OfflineBadge from '@/components/pwa/OfflineBadge'
 import UpdatePrompt from '@/components/pwa/UpdatePrompt'
+import { ToastProvider } from '@/components/ui/Toast'
 
 export default function AppLayout() {
   return (
+    <ToastProvider>
     <div className="min-h-screen">
       <Sidebar />
       <div className="lg:pl-64">
@@ -26,5 +28,6 @@ export default function AppLayout() {
       <BottomNav />
       <UpdatePrompt />
     </div>
+    </ToastProvider>
   )
 }
