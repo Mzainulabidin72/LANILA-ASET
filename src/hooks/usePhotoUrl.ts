@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { getSignedPhotoUrl } from '@/lib/storage'
+import { getPhotoObjectUrl } from '@/lib/storage'
 
-/** Bucket foto bersifat private, jadi URL-nya "bertanda tangan" dan berlaku 1 jam. */
+/** Foto diambil dari cache lokal bila ada (jalan offline), jika tidak diunduh lalu disimpan. */
 export function usePhotoUrl(path: string | null | undefined) {
   return useQuery({
     queryKey: ['photo-url', path],
-    queryFn: () => getSignedPhotoUrl(path as string),
+    queryFn: () => getPhotoObjectUrl(path as string),
     enabled: !!path,
-    staleTime: 50 * 60 * 1000,
+    staleTime: Infinity,
   })
 }

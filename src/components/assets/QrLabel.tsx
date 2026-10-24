@@ -17,7 +17,7 @@ export default function QrLabel({ assetId, code, name, qrSize = 110 }: Props) {
         <QRCodeSVG value={assetQrValue(assetId)} size={qrSize} level="M" bgColor="#ffffff" fgColor="#000000" />
       </div>
       <div className="min-w-0">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Lanila Aset</p>
+        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-400">Lanila Aset</p>
         <p className="font-mono text-sm font-bold leading-tight">{code}</p>
         <p className="mt-0.5 line-clamp-3 text-[11px] leading-snug">{name}</p>
       </div>

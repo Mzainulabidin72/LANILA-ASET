@@ -75,12 +75,12 @@ export default function LoansPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <Link to={`/assets/${l.asset_id}`} className="block truncate font-semibold hover:underline">{l.asset?.name ?? '-'}</Link>
-                      <p className="font-mono text-[11px] text-slate-400">{l.asset?.asset_code}</p>
+                      <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">{l.asset?.asset_code}</p>
                     </div>
                     <LoanBadge value={st} />
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{l.employee?.full_name ?? '-'}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
                     Pinjam {formatDate(l.loan_date)} · Jatuh tempo {formatDate(l.due_date)}
                     {l.return_date && ` · Kembali ${formatDate(l.return_date)}`}
                   </p>
@@ -96,7 +96,7 @@ export default function LoansPage() {
           {/* Tabel (laptop) */}
           <div className="card hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800">
+              <thead className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-600 dark:border-slate-800 dark:text-slate-400">
                 <tr>
                   <th className="p-3 font-semibold">Aset</th>
                   <th className="p-3 font-semibold">Peminjam</th>
@@ -114,7 +114,7 @@ export default function LoansPage() {
                     <tr key={l.id}>
                       <td className="p-3">
                         <Link to={`/assets/${l.asset_id}`} className="block font-semibold hover:underline">{l.asset?.name ?? '-'}</Link>
-                        <span className="font-mono text-xs text-slate-400">{l.asset?.asset_code}</span>
+                        <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{l.asset?.asset_code}</span>
                       </td>
                       <td className="p-3">{l.employee?.full_name ?? '-'}</td>
                       <td className="p-3">{formatDate(l.loan_date)}</td>

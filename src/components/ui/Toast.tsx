@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.kind === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto flex items-start gap-2.5 rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg ${t.kind === 'success' ? 'bg-green-600' : 'bg-red-600'}`}
+            className={`pointer-events-auto flex items-start gap-2.5 rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg ${t.kind === 'success' ? 'bg-green-700' : 'bg-red-700'}`}
           >
             {t.kind === 'success' ? <CheckCircle2 size={18} className="mt-0.5 shrink-0" /> : <XCircle size={18} className="mt-0.5 shrink-0" />}
             <span>{t.message}</span>

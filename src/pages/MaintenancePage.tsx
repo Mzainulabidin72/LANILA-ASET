@@ -8,6 +8,7 @@ import {
 } from '@/hooks/useMaintenance'
 import { daysBetween, todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { QUEUED_MSG } from '@/lib/offline/messages'
 import { formatDate, formatRupiah } from '@/lib/format'
 import { MaintBadge, maintDisplayStatus } from '@/components/maintenance/MaintenanceBadge'
 import MaintenanceFormModal from '@/components/maintenance/MaintenanceFormModal'
@@ -69,7 +70,10 @@ export default function MaintenancePage() {
 
   const doCancel = async () => {
     if (!cancelling) return
-    try { await cancel.mutateAsync(cancelling.id); toast.success('Jadwal dibatalkan.') }
+    try {
+      const r = await cancel.mutateAsync({ id: cancelling.id, title: cancelling.title })
+      toast.success(r.queued ? QUEUED_MSG : 'Jadwal dibatalkan.')
+    }
     catch (e) { toast.error(errorMessage(e)) }
     finally { setCancelling(null) }
   }
@@ -125,12 +129,12 @@ export default function MaintenancePage() {
                     <div className="min-w-0">
                       <p className="font-semibold">{m.title}</p>
                       <Link to={`/assets/${m.asset_id}`} className="text-sm text-slate-600 hover:underline dark:text-slate-300">
-                        {m.asset?.name ?? '-'} <span className="font-mono text-xs text-slate-400">({m.asset?.asset_code})</span>
+                        {m.asset?.name ?? '-'} <span className="font-mono text-xs text-slate-600 dark:text-slate-400">({m.asset?.asset_code})</span>
                       </Link>
                     </div>
                     <MaintBadge value={st} />
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
                     Jadwal {formatDate(m.scheduled_date)}
                     {m.completed_date && ` · Selesai ${formatDate(m.completed_date)}`}
                     {m.interval_days ? ` · Berkala tiap ${m.interval_days} hari` : ''}

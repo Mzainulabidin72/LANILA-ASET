@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useReturnLoan, type LoanWithRefs } from '@/hooks/useLoans'
 import { todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { QUEUED_MSG } from '@/lib/offline/messages'
 import { formatDate } from '@/lib/format'
 import { makeReturnSchema, type ReturnFormValues } from '@/lib/schemasOps'
 import { CONDITION_LABEL } from '@/types/database'
@@ -31,8 +32,8 @@ export default function ReturnModal({ loan, onClose }: Props) {
     const extra = v.notes.trim()
     const notes = extra ? [loan.notes, `Pengembalian: ${extra}`].filter(Boolean).join('\n') : loan.notes
     try {
-      await ret.mutateAsync({ id: loan.id, return_date: v.return_date, condition_in: v.condition_in, notes })
-      toast.success('Aset berhasil dikembalikan.')
+      const r = await ret.mutateAsync({ id: loan.id, return_date: v.return_date, condition_in: v.condition_in, notes, assetName: loan.asset?.name })
+      toast.success(r.queued ? QUEUED_MSG : 'Aset berhasil dikembalikan.')
       onClose()
     } catch (e) {
       toast.error(errorMessage(e, 'Pengembalian gagal disimpan.'))
@@ -45,7 +46,7 @@ export default function ReturnModal({ loan, onClose }: Props) {
         <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
           <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
             <p className="font-semibold">{loan.asset?.name}</p>
-            <p className="font-mono text-xs text-slate-500">{loan.asset?.asset_code}</p>
+            <p className="font-mono text-xs text-slate-600 dark:text-slate-400">{loan.asset?.asset_code}</p>
             <p className="mt-1 text-slate-600 dark:text-slate-300">
               Dipinjam {loan.employee?.full_name ?? '-'} sejak {formatDate(loan.loan_date)}
             </p>
@@ -60,7 +61,7 @@ export default function ReturnModal({ loan, onClose }: Props) {
             <select id="condition_in" className="input" {...register('condition_in')}>
               {Object.entries(CONDITION_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <p className="mt-1 text-xs text-slate-500">Kondisi aset akan ikut diperbarui sesuai pilihan ini.</p>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Kondisi aset akan ikut diperbarui sesuai pilihan ini.</p>
           </div>
           <div>
             <label htmlFor="ret_notes" className="label">Catatan pengembalian</label>

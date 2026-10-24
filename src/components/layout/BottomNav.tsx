@@ -23,7 +23,7 @@ export default function BottomNav() {
               to={to}
               className={({ isActive }) =>
                 `flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
-                  isActive ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
+                  isActive ? 'text-brand-700 dark:text-brand-300' : 'text-slate-600 dark:text-slate-400'
                 }`
               }
             >

@@ -66,7 +66,7 @@ export default function ReportsPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Laporan</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Pilih jenis laporan, atur filter, lalu unduh sebagai Excel atau PDF.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Pilih jenis laporan, atur filter, lalu unduh sebagai Excel atau PDF.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Jenis laporan">
@@ -79,7 +79,7 @@ export default function ReportsPage() {
             className={`card min-h-[44px] p-4 text-left transition ${kind === k.kind ? '!border-brand-600 ring-2 ring-brand-600/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
           >
             <p className="font-semibold">{REPORT_LABEL[k.kind]}</p>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{k.desc}</p>
+            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">{k.desc}</p>
           </button>
         ))}
       </div>
@@ -148,7 +148,7 @@ export default function ReportsPage() {
             {busy === 'pdf' ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />} Unduh PDF
           </button>
         </div>
-        <p className="text-xs text-slate-500">Laporan memerlukan koneksi internet karena data diambil langsung dari server.</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">Laporan memerlukan koneksi internet karena data diambil langsung dari server.</p>
       </section>
     </div>
   )

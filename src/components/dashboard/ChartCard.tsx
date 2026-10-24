@@ -8,7 +8,7 @@ export default function ChartCard({ title, loading, empty, children }: { title: 
       {loading ? (
         <Skeleton className="h-56 w-full" />
       ) : empty ? (
-        <p className="flex h-56 items-center justify-center text-sm text-slate-400">Belum ada data</p>
+        <p className="flex h-56 items-center justify-center text-sm text-slate-600 dark:text-slate-400">Belum ada data</p>
       ) : (
         <div className="h-56">{children}</div>
       )}

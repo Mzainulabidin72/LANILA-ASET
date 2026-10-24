@@ -108,7 +108,7 @@ export default function AssetForm({ defaultValues, existingPhotoPath, submitting
               .filter(([k]) => k !== 'dipinjam' || loanedNow)
               .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          {loanedNow && <p className="mt-1 text-xs text-slate-500">Status "Dipinjam" berubah otomatis lewat menu Peminjaman.</p>}
+          {loanedNow && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Status "Dipinjam" berubah otomatis lewat menu Peminjaman.</p>}
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="notes" className="label">Catatan</label>
@@ -117,7 +117,7 @@ export default function AssetForm({ defaultValues, existingPhotoPath, submitting
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-600 dark:text-slate-400">
         Kategori, lokasi, atau pegawai belum ada? Tambahkan dulu di menu <Link to="/master" className="font-semibold text-brand-700 underline dark:text-brand-300">Master Data</Link>.
       </p>
 

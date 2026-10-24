@@ -12,7 +12,7 @@ export default function MaintenanceList({ items }: { items: MaintenanceDue[] }) 
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{m.asset_name}</p>
-            <p className="truncate text-xs text-slate-500">{m.asset_code} · {m.title}</p>
+            <p className="truncate text-xs text-slate-600 dark:text-slate-400">{m.asset_code} · {m.title}</p>
           </div>
           <div className="text-right">
             <p className="text-xs font-medium">{formatDate(m.scheduled_date)}</p>

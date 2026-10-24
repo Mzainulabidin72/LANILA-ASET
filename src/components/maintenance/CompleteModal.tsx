@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCompleteMaintenance, type MaintenanceWithRefs } from '@/hooks/useMaintenance'
 import { addDaysISO, todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { QUEUED_MSG } from '@/lib/offline/messages'
 import { formatDate } from '@/lib/format'
 import { completeFormSchema, type CompleteFormValues } from '@/lib/schemasOps'
 
@@ -47,7 +48,7 @@ export default function CompleteModal({ item, onClose }: Props) {
         schedule_next: v.schedule_next,
         userId: user?.id,
       })
-      toast.success(r.nextCreated ? 'Perawatan selesai. Jadwal berikutnya sudah dibuat.' : 'Perawatan ditandai selesai.')
+      toast.success(r.queued ? QUEUED_MSG : r.nextCreated ? 'Perawatan selesai. Jadwal berikutnya sudah dibuat.' : 'Perawatan ditandai selesai.')
       onClose()
     } catch (e) {
       toast.error(errorMessage(e, 'Gagal menyimpan.'))

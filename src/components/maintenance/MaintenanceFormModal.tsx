@@ -10,6 +10,7 @@ import { useAsset } from '@/hooks/useAssets'
 import { useSaveMaintenance, type MaintenanceWithRefs } from '@/hooks/useMaintenance'
 import { todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { QUEUED_MSG } from '@/lib/offline/messages'
 import { maintenanceFormSchema, type MaintenanceFormValues } from '@/lib/schemasOps'
 
 interface Props {
@@ -70,7 +71,7 @@ export default function MaintenanceFormModal({ open, onClose, editing, presetAss
 
   const submit = async (v: MaintenanceFormValues) => {
     try {
-      await save.mutateAsync({
+      const r = await save.mutateAsync({
         id: editing?.id,
         asset_id: v.asset_id,
         title: v.title.trim(),
@@ -81,7 +82,7 @@ export default function MaintenanceFormModal({ open, onClose, editing, presetAss
         performed_by: v.performed_by.trim() || null,
         created_by: user?.id,
       })
-      toast.success(editing ? 'Jadwal diperbarui.' : 'Jadwal perawatan ditambahkan.')
+      toast.success(r.queued ? QUEUED_MSG : editing ? 'Jadwal diperbarui.' : 'Jadwal perawatan ditambahkan.')
       onClose()
     } catch (e) {
       toast.error(errorMessage(e, 'Jadwal gagal disimpan.'))

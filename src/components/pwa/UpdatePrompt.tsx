@@ -26,7 +26,7 @@ export default function UpdatePrompt() {
         {needRefresh ? 'Versi baru tersedia, muat ulang.' : 'Aplikasi siap dipakai offline.'}
       </p>
       {needRefresh ? (
-        <button onClick={() => updateServiceWorker(true)} className="min-h-[44px] rounded-xl bg-brand-500 px-4 font-semibold text-white">
+        <button onClick={() => updateServiceWorker(true)} className="min-h-[44px] rounded-xl bg-brand-700 px-4 font-semibold text-white">
           Muat Ulang
         </button>
       ) : null}

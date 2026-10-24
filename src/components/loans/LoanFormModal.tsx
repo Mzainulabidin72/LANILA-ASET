@@ -10,6 +10,7 @@ import { useAsset, useLookups } from '@/hooks/useAssets'
 import { useCreateLoan } from '@/hooks/useLoans'
 import { todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { QUEUED_MSG } from '@/lib/offline/messages'
 import { loanFormSchema, type LoanFormValues } from '@/lib/schemasOps'
 import { CONDITION_LABEL } from '@/types/database'
 
@@ -60,7 +61,8 @@ export default function LoanFormModal({ open, onClose, presetAssetId }: Props) {
 
   const submit = async (v: LoanFormValues) => {
     try {
-      await create.mutateAsync({
+      const r = await create.mutateAsync({
+        assetName: picked?.name,
         asset_id: v.asset_id,
         employee_id: v.employee_id,
         loan_date: v.loan_date,
@@ -69,7 +71,7 @@ export default function LoanFormModal({ open, onClose, presetAssetId }: Props) {
         notes: v.notes.trim() || null,
         created_by: user?.id,
       })
-      toast.success('Peminjaman berhasil dicatat.')
+      toast.success(r.queued ? QUEUED_MSG : 'Peminjaman berhasil dicatat.')
       onClose()
     } catch (e) {
       toast.error(errorMessage(e, 'Peminjaman gagal disimpan.'))
@@ -97,7 +99,7 @@ export default function LoanFormModal({ open, onClose, presetAssetId }: Props) {
             {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
           </select>
           {errors.employee_id && <p className="field-error">{errors.employee_id.message}</p>}
-          {employees.length === 0 && <p className="mt-1 text-xs text-slate-500">Belum ada pegawai aktif. Tambahkan di Master Data.</p>}
+          {employees.length === 0 && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Belum ada pegawai aktif. Tambahkan di Master Data.</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

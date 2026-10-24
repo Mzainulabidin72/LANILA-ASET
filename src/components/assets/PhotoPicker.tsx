@@ -63,7 +63,7 @@ export default function PhotoPicker({ existingPath, file, removed, onFile, onRem
       </div>
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
       <input ref={galleryRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
-      <p className="mt-2 text-xs text-slate-500">Foto otomatis diperkecil sebelum diunggah.</p>
+      <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">Foto otomatis diperkecil sebelum diunggah.</p>
     </div>
   )
 }

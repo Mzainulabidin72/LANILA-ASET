@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Database, HandCoins, LayoutDashboard, ScanLine, Wrench, type LucideIcon } from 'lucide-react'
+import { BarChart3, Boxes, Database, HandCoins, LayoutDashboard, RefreshCw, ScanLine, Wrench, type LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/types/database'
 
 export interface NavItem {
@@ -17,4 +17,5 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/maintenance', label: 'Perawatan', icon: Wrench },
   { to: '/reports', label: 'Laporan', icon: BarChart3 },
   { to: '/master', label: 'Master Data', icon: Database, roles: ['admin', 'staff'] },
+  { to: '/sync', label: 'Sinkronisasi', icon: RefreshCw },
 ]

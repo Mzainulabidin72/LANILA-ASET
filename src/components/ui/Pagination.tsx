@@ -8,7 +8,7 @@ export default function Pagination({ page, pageSize, total, onChange }: Props) {
   const to = Math.min(page * pageSize, total)
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className="text-xs text-slate-600 dark:text-slate-400">
         {from}–{to} dari {total}
       </p>
       <div className="flex items-center gap-2">

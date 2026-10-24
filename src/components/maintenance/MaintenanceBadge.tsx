@@ -17,7 +17,7 @@ const STYLE: Record<MaintDisplay, { label: string; cls: string }> = {
   segera: { label: 'Segera', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
   terlambat: { label: 'Terlambat', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
   selesai: { label: 'Selesai', cls: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
-  dibatalkan: { label: 'Dibatalkan', cls: 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
+  dibatalkan: { label: 'Dibatalkan', cls: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
 }
 
 export function MaintBadge({ value }: { value: MaintDisplay }) {

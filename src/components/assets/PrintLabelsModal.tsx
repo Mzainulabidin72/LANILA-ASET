@@ -38,7 +38,7 @@ export default function PrintLabelsModal({ open, onClose, assetId, code, name }:
               onChange={(e) => setCopies(Number(e.target.value))}
             />
           </div>
-          <p className="text-xs text-slate-500">Tip: di dialog cetak, pilih ukuran kertas stiker/label atau A4, lalu atur skala 100%.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">Tip: di dialog cetak, pilih ukuran kertas stiker/label atau A4, lalu atur skala 100%.</p>
         </div>
       </Modal>
 

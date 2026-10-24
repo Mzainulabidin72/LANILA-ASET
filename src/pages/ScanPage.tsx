@@ -81,15 +81,15 @@ export default function ScanPage() {
     <div className="mx-auto max-w-md space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Scan QR</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Arahkan kamera ke label QR pada aset.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Arahkan kamera ke label QR pada aset.</p>
       </div>
 
       <div className="card overflow-hidden">
         <div id={READER_ID} className="w-full bg-slate-900" style={{ minHeight: state === 'error' ? 0 : 300 }} />
-        {state === 'starting' && <p className="p-4 text-center text-sm text-slate-500">Membuka kamera… izinkan akses kamera jika diminta.</p>}
+        {state === 'starting' && <p className="p-4 text-center text-sm text-slate-600 dark:text-slate-400">Membuka kamera… izinkan akses kamera jika diminta.</p>}
         {state === 'error' && (
           <div className="flex flex-col items-center gap-2 p-6 text-center">
-            <CameraOff size={32} className="text-slate-400" />
+            <CameraOff size={32} className="text-slate-600 dark:text-slate-400" />
             <p className="text-sm text-slate-600 dark:text-slate-300">{errorText}</p>
           </div>
         )}

@@ -52,7 +52,7 @@ export default function AuditTimeline({ logs }: { logs: AuditLog[] }) {
           <li key={log.id} className="relative">
             <span className="absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-600 ring-4 ring-white dark:ring-slate-900" />
             <p className="text-sm font-semibold">{title(log)}</p>
-            <p className="text-xs text-slate-400">{formatDateTime(log.created_at)}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{formatDateTime(log.created_at)}</p>
             {list.length > 0 && (
               <ul className="mt-1 space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
                 {list.map((c) => <li key={c}>• {c}</li>)}

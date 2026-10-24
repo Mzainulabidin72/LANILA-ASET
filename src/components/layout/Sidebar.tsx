@@ -38,7 +38,7 @@ export default function Sidebar() {
       <div className="border-t border-slate-200 p-3 dark:border-slate-800">
         <div className="mb-2 px-2">
           <p className="truncate text-sm font-semibold">{profile?.full_name ?? 'Pengguna'}</p>
-          <p className="text-xs text-slate-500">{role ? ROLE_LABEL[role] : '-'}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{role ? ROLE_LABEL[role] : '-'}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={toggleTheme} className="btn-secondary flex-1" aria-label="Ganti mode gelap/terang">

@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     // Hapus cache data API supaya data tidak bocor ke user lain di perangkat yang sama
     if ('caches' in window) {
-      await Promise.all(['api-cache', 'aset-photos'].map((k) => caches.delete(k)))
+      await Promise.all(['api-cache', 'aset-photo-blobs'].map((k) => caches.delete(k)))
     }
   }
 

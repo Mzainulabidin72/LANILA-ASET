@@ -9,7 +9,7 @@ export default function AssetPhoto({ path, alt, className = 'h-12 w-12' }: Props
   if (path && isLoading) return <Skeleton className={className} />
   if (!path || !url) {
     return (
-      <div className={`flex items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 ${className}`} aria-label="Tidak ada foto">
+      <div className={`flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:text-slate-400 dark:bg-slate-800 ${className}`} aria-label="Tidak ada foto">
         <ImageOff size={18} />
       </div>
     )

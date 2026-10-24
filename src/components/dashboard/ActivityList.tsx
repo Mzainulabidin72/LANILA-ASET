@@ -28,7 +28,7 @@ export default function ActivityList({ logs }: { logs: AuditLog[] }) {
               <p className="truncate text-sm">
                 <b>{ENTITY[log.entity_type] ?? log.entity_type}</b> {describe(log)} {a.label}
               </p>
-              <p className="text-xs text-slate-400">{formatDateTime(log.created_at)}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{formatDateTime(log.created_at)}</p>
             </div>
           </li>
         )

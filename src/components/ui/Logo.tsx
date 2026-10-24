@@ -18,7 +18,7 @@ export default function Logo({ size = 36, withText = true, className = '' }: Pro
       {withText && (
         <span className="leading-none">
           <span className="block text-lg font-extrabold tracking-tight text-ink dark:text-white">Lanila</span>
-          <span className="block text-xs font-semibold tracking-wide text-brand-600 dark:text-brand-400">Aset</span>
+          <span className="block text-xs font-semibold tracking-wide text-brand-700 dark:text-brand-300">Aset</span>
         </span>
       )}
     </span>

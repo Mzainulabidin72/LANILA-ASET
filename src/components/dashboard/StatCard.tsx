@@ -20,7 +20,7 @@ export default function StatCard({ label, value, icon: Icon, loading, tone = 'br
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className={`rounded-lg p-1.5 ${TONES[tone]}`}><Icon size={16} /></span>
-        <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
+        <span className="text-sm text-slate-600 dark:text-slate-400">{label}</span>
       </div>
       {loading ? <Skeleton className="h-8 w-28" /> : <p className="truncate text-xl font-bold lg:text-2xl">{value}</p>}
     </div>

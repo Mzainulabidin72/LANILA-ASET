@@ -162,7 +162,7 @@ function MasterTab({ tab }: { tab: TabDef }) {
                   {String(r[tab.titleKey])}
                   {r.is_active === false && <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">Nonaktif</span>}
                 </p>
-                {tab.subtitle(r) && <p className="truncate text-xs text-slate-500">{tab.subtitle(r)}</p>}
+                {tab.subtitle(r) && <p className="truncate text-xs text-slate-600 dark:text-slate-400">{tab.subtitle(r)}</p>}
               </div>
               <button className="btn-ghost min-w-[44px] !px-0" onClick={() => setEditing(r)} aria-label={`Ubah ${String(r[tab.titleKey])}`}><Pencil size={18} /></button>
               {isAdmin && (

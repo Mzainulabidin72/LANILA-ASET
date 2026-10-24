@@ -18,7 +18,7 @@ export default function ProtectedRoute({ allowedRoles }: Props) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
         <h1 className="text-xl font-bold">Belum punya akses</h1>
-        <p className="max-w-sm text-sm text-slate-500">
+        <p className="max-w-sm text-sm text-slate-600 dark:text-slate-400">
           Akun ini belum didaftarkan di LANILA ASET atau telah dinonaktifkan. Hubungi Admin untuk mendapat akses.
         </p>
         <button className="btn-secondary" onClick={signOut}>Keluar</button>

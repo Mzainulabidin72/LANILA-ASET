@@ -1,3 +1,5 @@
+import type { AssetClass, ValuationSource, Visibility } from './wealth'
+
 export type UserRole = 'admin' | 'staff' | 'viewer'
 export type AssetCondition = 'baik' | 'rusak_ringan' | 'rusak_berat' | 'hilang'
 export type AssetStatus = 'aktif' | 'dipinjam' | 'perawatan' | 'dihapus'
@@ -44,6 +46,25 @@ export interface Asset {
   created_by: string | null
   created_at: string
   updated_at: string
+  // --- modul kekayaan (04_wealth.sql) ---
+  asset_class: AssetClass
+  visibility: Visibility
+  owner_id: string | null
+  currency: string
+  institution: string | null
+  symbol: string | null
+  account_last4: string | null
+  quantity: number | null
+  fees: number | null
+  current_unit_price: number | null
+  current_value: number | null
+  fx_rate: number | null
+  valuation_source: ValuationSource
+  valued_at: string | null
+  valuation_note: string | null
+  interest_rate: number | null
+  maturity_date: string | null
+  extra: Record<string, unknown>
 }
 
 export interface Loan {
