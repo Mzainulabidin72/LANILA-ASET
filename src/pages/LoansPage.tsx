@@ -1,146 +1,138 @@
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { HandCoins, Plus, Undo2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { LOAN_PAGE_SIZE, useLoansList, type LoanTab, type LoanWithRefs } from '@/hooks/useLoans'
-import { daysBetween, todayISO } from '@/lib/dates'
-import { formatDate } from '@/lib/format'
-import { LoanBadge, loanDisplayStatus } from '@/components/loans/LoanBadge'
+import { LOAN_PAGE_SIZE, useLoanCounts, useLoansList, type LoanFilters, type LoanSort, type LoanWithRefs } from '@/hooks/useLoans'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { todayISO } from '@/lib/dates'
+import { isValidRange, type LoanTab } from '@/lib/loans'
+import LoanDetailModal from '@/components/loans/LoanDetailModal'
+import LoanEmpty from '@/components/loans/LoanEmpty'
 import LoanFormModal from '@/components/loans/LoanFormModal'
+import LoanList from '@/components/loans/LoanList'
+import LoanSummaryCards from '@/components/loans/LoanSummaryCards'
+import LoanTabs from '@/components/loans/LoanTabs'
+import LoanToolbar from '@/components/loans/LoanToolbar'
 import ReturnModal from '@/components/loans/ReturnModal'
-import SegmentedTabs from '@/components/ui/SegmentedTabs'
 import Pagination from '@/components/ui/Pagination'
-import EmptyState from '@/components/ui/EmptyState'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import { Skeleton } from '@/components/ui/Skeleton'
 
-const TABS: { value: LoanTab; label: string }[] = [
-  { value: 'active', label: 'Sedang dipinjam' },
-  { value: 'overdue', label: 'Terlambat' },
-  { value: 'returned', label: 'Dikembalikan' },
-  { value: 'all', label: 'Semua' },
-]
-const EMPTY_TEXT: Record<LoanTab, string> = {
-  active: 'Tidak ada aset yang sedang dipinjam.',
-  overdue: 'Tidak ada peminjaman yang terlambat.',
-  returned: 'Belum ada riwayat pengembalian.',
-  all: 'Belum ada data peminjaman.',
-}
+const TAB_VALUES: LoanTab[] = ['active', 'overdue', 'returned', 'all']
+const SORT_VALUES: LoanSort[] = ['newest', 'oldest', 'due_soon']
+const PANEL_ID = 'loan-panel'
 
 export default function LoansPage() {
   const { can } = useAuth()
   const canEdit = can('admin', 'staff')
   const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useState<LoanTab>('active')
-  const [page, setPage] = useState(1)
   const [returning, setReturning] = useState<LoanWithRefs | null>(null)
-  const { data, isLoading, isError, refetch, isFetching } = useLoansList(tab, page)
+  const [detail, setDetail] = useState<LoanWithRefs | null>(null)
   const today = todayISO()
 
-  const newParam = params.get('new') // ?new=<assetId> atau ?new=1
-  const formOpen = canEdit && newParam !== null
-  const closeForm = () => { const n = new URLSearchParams(params); n.delete('new'); setParams(n, { replace: true }) }
-  const openForm = () => { const n = new URLSearchParams(params); n.set('new', '1'); setParams(n, { replace: true }) }
-
-  const items = data?.items ?? []
-  const lateInfo = (l: LoanWithRefs) => {
-    if (l.return_date || !l.due_date || l.due_date >= today) return null
-    return `Telat ${daysBetween(l.due_date, today)} hari`
+  // Seluruh keadaan filter disimpan di URL: bisa di-bookmark, dan tetap ada saat pindah tab.
+  const tabParam = params.get('tab') as LoanTab | null
+  const tab: LoanTab = tabParam && TAB_VALUES.includes(tabParam) ? tabParam : 'active'
+  const sortParam = params.get('sort') as LoanSort | null
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const raw: LoanFilters = {
+    q: params.get('q') ?? '',
+    from: params.get('from') ?? '',
+    to: params.get('to') ?? '',
+    sort: sortParam && SORT_VALUES.includes(sortParam) ? sortParam : 'newest',
   }
+  // Rentang tanggal terbalik tidak dipakai untuk query (peringatan tampil di toolbar)
+  const filters: LoanFilters = isValidRange(raw.from, raw.to) ? raw : { ...raw, from: '', to: '' }
+
+  const update = (key: string, value: string, resetPage = true) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value); else next.delete(key)
+    if (resetPage) next.delete('page')
+    setParams(next, { replace: true })
+  }
+  const setTab = (t: LoanTab) => update('tab', t === 'active' ? '' : t)
+
+  const [searchInput, setSearchInput] = useState(raw.q)
+  const debounced = useDebouncedValue(searchInput, 350)
+  useEffect(() => {
+    if (debounced !== raw.q) update('q', debounced)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced])
+
+  const list = useLoansList(tab, page, filters)
+  const counts = useLoanCounts(filters)
+  const items = list.data?.items ?? []
+  const total = list.data?.total ?? 0
+  const filtersActive = !!(raw.q || raw.from || raw.to || raw.sort !== 'newest')
+  const dataFilterActive = !!(filters.q || filters.from || filters.to)
+
+  const clearFilters = () => {
+    setSearchInput('')
+    const next = new URLSearchParams()
+    if (tab !== 'active') next.set('tab', tab)
+    setParams(next, { replace: true })
+  }
+
+  // ?new=<id|1> membuka form peminjaman (dipakai tombol "Pinjamkan" di detail aset)
+  const newParam = params.get('new')
+  const formOpen = canEdit && newParam !== null
+  const openForm = () => update('new', '1', false)
+  const closeForm = () => update('new', '', false)
+
+  const startReturn = (l: LoanWithRefs) => { setDetail(null); setReturning(l) }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Peminjaman</h1>
-        {canEdit && <button className="btn-primary" onClick={openForm}><Plus size={18} /> Pinjamkan</button>}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Peminjaman</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Catat dan pantau aset yang sedang dipinjam.</p>
+        </div>
+        {canEdit && <button className="btn-primary" onClick={openForm}><Plus size={18} aria-hidden="true" /> Peminjaman</button>}
       </div>
 
-      <SegmentedTabs value={tab} options={TABS} onChange={(v) => { setTab(v); setPage(1) }} />
+      <LoanSummaryCards
+        counts={counts.data}
+        loading={counts.isLoading}
+        error={counts.isError}
+        onRetry={() => counts.refetch()}
+        filtered={dataFilterActive}
+        active={tab}
+        onPick={setTab}
+      />
 
-      {isError ? (
-        <ErrorMessage message="Data peminjaman gagal dimuat." onRetry={() => refetch()} />
-      ) : isLoading ? (
-        <div className="space-y-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}</div>
-      ) : items.length === 0 ? (
-        <EmptyState icon={HandCoins} title="Tidak ada data" description={EMPTY_TEXT[tab]}
-          action={canEdit && tab === 'active' ? <button className="btn-primary" onClick={openForm}><Plus size={18} /> Pinjamkan Aset</button> : undefined} />
-      ) : (
-        <div className={isFetching ? 'opacity-70 transition-opacity' : ''}>
-          {/* Kartu (HP) */}
-          <ul className="space-y-3 md:hidden">
-            {items.map((l) => {
-              const st = loanDisplayStatus(l, today)
-              return (
-                <li key={l.id} className="card space-y-2 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Link to={`/assets/${l.asset_id}`} className="block truncate font-semibold hover:underline">{l.asset?.name ?? '-'}</Link>
-                      <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">{l.asset?.asset_code}</p>
-                    </div>
-                    <LoanBadge value={st} />
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{l.employee?.full_name ?? '-'}</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Pinjam {formatDate(l.loan_date)} · Jatuh tempo {formatDate(l.due_date)}
-                    {l.return_date && ` · Kembali ${formatDate(l.return_date)}`}
-                  </p>
-                  {lateInfo(l) && <p className="text-xs font-semibold text-red-600 dark:text-red-400">{lateInfo(l)}</p>}
-                  {canEdit && !l.return_date && (
-                    <button className="btn-secondary w-full" onClick={() => setReturning(l)}><Undo2 size={18} /> Kembalikan</button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+      <LoanTabs value={tab} counts={counts.data} onChange={setTab} panelId={PANEL_ID} />
 
-          {/* Tabel (laptop) */}
-          <div className="card hidden overflow-x-auto md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-600 dark:border-slate-800 dark:text-slate-400">
-                <tr>
-                  <th className="p-3 font-semibold">Aset</th>
-                  <th className="p-3 font-semibold">Peminjam</th>
-                  <th className="p-3 font-semibold">Tgl pinjam</th>
-                  <th className="p-3 font-semibold">Jatuh tempo</th>
-                  <th className="p-3 font-semibold">Tgl kembali</th>
-                  <th className="p-3 font-semibold">Status</th>
-                  {canEdit && <th className="p-3" />}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {items.map((l) => {
-                  const st = loanDisplayStatus(l, today)
-                  return (
-                    <tr key={l.id}>
-                      <td className="p-3">
-                        <Link to={`/assets/${l.asset_id}`} className="block font-semibold hover:underline">{l.asset?.name ?? '-'}</Link>
-                        <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{l.asset?.asset_code}</span>
-                      </td>
-                      <td className="p-3">{l.employee?.full_name ?? '-'}</td>
-                      <td className="p-3">{formatDate(l.loan_date)}</td>
-                      <td className="p-3">
-                        {formatDate(l.due_date)}
-                        {lateInfo(l) && <span className="block text-xs font-semibold text-red-600 dark:text-red-400">{lateInfo(l)}</span>}
-                      </td>
-                      <td className="p-3">{formatDate(l.return_date)}</td>
-                      <td className="p-3"><LoanBadge value={st} /></td>
-                      {canEdit && (
-                        <td className="p-3 text-right">
-                          {!l.return_date && <button className="btn-secondary" onClick={() => setReturning(l)}><Undo2 size={18} /> Kembalikan</button>}
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      <LoanToolbar
+        searchInput={searchInput}
+        onSearchInput={setSearchInput}
+        filters={raw}
+        onChange={(k, v) => update(k, k === 'sort' && v === 'newest' ? '' : v)}
+        active={filtersActive}
+        onClear={clearFilters}
+      />
+
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={`loan-tab-${tab}`} tabIndex={0} className="outline-none">
+        {list.isError ? (
+          <ErrorMessage message="Data peminjaman gagal dimuat. Periksa koneksi internet Anda." onRetry={() => list.refetch()} />
+        ) : list.isLoading || (list.isFetching && !list.data) ? (
+          <div className="space-y-3" aria-busy="true" aria-label="Memuat data peminjaman">
+            {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
-
-          <div className="mt-4"><Pagination page={page} pageSize={LOAN_PAGE_SIZE} total={data?.total ?? 0} onChange={setPage} /></div>
-        </div>
-      )}
+        ) : items.length === 0 ? (
+          <LoanEmpty tab={tab} filtered={dataFilterActive} canCreate={canEdit} onCreate={openForm} onClear={clearFilters} />
+        ) : (
+          <div className={list.isFetching ? 'opacity-70 transition-opacity motion-reduce:transition-none' : ''}>
+            <LoanList items={items} startIndex={(page - 1) * LOAN_PAGE_SIZE} today={today} canEdit={canEdit} onDetail={setDetail} onReturn={startReturn} />
+            <div className="mt-4">
+              <Pagination page={page} pageSize={LOAN_PAGE_SIZE} total={total} onChange={(p) => update('page', p === 1 ? '' : String(p), false)} />
+            </div>
+          </div>
+        )}
+      </div>
 
       <LoanFormModal open={formOpen} onClose={closeForm} presetAssetId={newParam && newParam !== '1' ? newParam : undefined} />
+      <LoanDetailModal loan={detail} today={today} canEdit={canEdit} onClose={() => setDetail(null)} onReturn={startReturn} />
       <ReturnModal loan={returning} onClose={() => setReturning(null)} />
     </div>
   )
