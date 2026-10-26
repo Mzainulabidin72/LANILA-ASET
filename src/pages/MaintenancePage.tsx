@@ -1,38 +1,34 @@
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, Pencil, Plus, Trash2, Wrench, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  MAINT_PAGE_SIZE, useCancelMaintenance, useDeleteMaintenance, useMaintenanceList,
-  type MaintTab, type MaintenanceWithRefs,
+  MAINT_PAGE_SIZE, useCancelMaintenance, useDeleteMaintenance, useMaintCounts, useMaintenanceList,
+  type MaintFilters, type MaintSort, type MaintenanceWithRefs,
 } from '@/hooks/useMaintenance'
-import { daysBetween, todayISO } from '@/lib/dates'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { todayISO } from '@/lib/dates'
 import { errorMessage } from '@/lib/errors'
+import { isValidRange } from '@/lib/loans'
+import type { MaintTab } from '@/lib/maintenance'
 import { QUEUED_MSG } from '@/lib/offline/messages'
-import { formatDate, formatRupiah } from '@/lib/format'
-import { MaintBadge, maintDisplayStatus } from '@/components/maintenance/MaintenanceBadge'
-import MaintenanceFormModal from '@/components/maintenance/MaintenanceFormModal'
 import CompleteModal from '@/components/maintenance/CompleteModal'
+import MaintDetailModal from '@/components/maintenance/MaintDetailModal'
+import MaintEmpty from '@/components/maintenance/MaintEmpty'
+import MaintList from '@/components/maintenance/MaintList'
+import MaintSummaryCards from '@/components/maintenance/MaintSummaryCards'
+import MaintToolbar from '@/components/maintenance/MaintToolbar'
+import MaintenanceFormModal from '@/components/maintenance/MaintenanceFormModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import SegmentedTabs from '@/components/ui/SegmentedTabs'
-import Pagination from '@/components/ui/Pagination'
-import EmptyState from '@/components/ui/EmptyState'
+import CountTabs from '@/components/ui/CountTabs'
 import ErrorMessage from '@/components/ui/ErrorMessage'
+import Pagination from '@/components/ui/Pagination'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 
-const TABS: { value: MaintTab; label: string }[] = [
-  { value: 'upcoming', label: 'Terjadwal' },
-  { value: 'overdue', label: 'Terlambat' },
-  { value: 'done', label: 'Selesai' },
-  { value: 'all', label: 'Semua' },
-]
-const EMPTY_TEXT: Record<MaintTab, string> = {
-  upcoming: 'Belum ada jadwal perawatan.',
-  overdue: 'Tidak ada perawatan yang terlambat.',
-  done: 'Belum ada perawatan yang selesai.',
-  all: 'Belum ada data perawatan.',
-}
+const TAB_VALUES: MaintTab[] = ['upcoming', 'overdue', 'done', 'all']
+const SORT_VALUES: MaintSort[] = ['auto', 'sched_asc', 'sched_desc', 'created']
+const PANEL_ID = 'maint-panel'
 
 export default function MaintenancePage() {
   const toast = useToast()
@@ -40,41 +36,71 @@ export default function MaintenancePage() {
   const canEdit = can('admin', 'staff')
   const isAdmin = can('admin')
   const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useState<MaintTab>('upcoming')
-  const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<MaintenanceWithRefs | null>(null)
   const [completing, setCompleting] = useState<MaintenanceWithRefs | null>(null)
+  const [detail, setDetail] = useState<MaintenanceWithRefs | null>(null)
   const [cancelling, setCancelling] = useState<MaintenanceWithRefs | null>(null)
   const [deleting, setDeleting] = useState<MaintenanceWithRefs | null>(null)
-  const { data, isLoading, isError, refetch, isFetching } = useMaintenanceList(tab, page)
   const cancel = useCancelMaintenance()
   const del = useDeleteMaintenance()
   const today = todayISO()
 
+  // Seluruh keadaan filter disimpan di URL: bisa di-bookmark, dan tetap ada saat pindah tab.
+  const tabParam = params.get('tab') as MaintTab | null
+  const tab: MaintTab = tabParam && TAB_VALUES.includes(tabParam) ? tabParam : 'upcoming'
+  const sortParam = params.get('sort') as MaintSort | null
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const raw: MaintFilters = {
+    q: params.get('q') ?? '',
+    from: params.get('from') ?? '',
+    to: params.get('to') ?? '',
+    sort: sortParam && SORT_VALUES.includes(sortParam) ? sortParam : 'auto',
+  }
+  const filters: MaintFilters = isValidRange(raw.from, raw.to) ? raw : { ...raw, from: '', to: '' }
+
+  const update = (key: string, value: string, resetPage = true) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value); else next.delete(key)
+    if (resetPage) next.delete('page')
+    setParams(next, { replace: true })
+  }
+  const setTab = (t: MaintTab) => update('tab', t === 'upcoming' ? '' : t)
+
+  const [searchInput, setSearchInput] = useState(raw.q)
+  const debounced = useDebouncedValue(searchInput, 350)
+  useEffect(() => {
+    if (debounced !== raw.q) update('q', debounced)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced])
+
+  const list = useMaintenanceList(tab, page, filters)
+  const counts = useMaintCounts(filters)
+  const items = list.data?.items ?? []
+  const total = list.data?.total ?? 0
+  const filtersActive = !!(raw.q || raw.from || raw.to || raw.sort !== 'auto')
+  const dataFilterActive = !!(filters.q || filters.from || filters.to)
+
+  const clearFilters = () => {
+    setSearchInput('')
+    const next = new URLSearchParams()
+    if (tab !== 'upcoming') next.set('tab', tab)
+    setParams(next, { replace: true })
+  }
+
+  // ?new=<id|1> membuka form penjadwalan (dipakai tombol "Jadwalkan Perawatan" di detail aset)
   const newParam = params.get('new')
   const formOpen = canEdit && (newParam !== null || editing !== null)
-  const closeForm = () => {
-    setEditing(null)
-    const n = new URLSearchParams(params); n.delete('new'); setParams(n, { replace: true })
-  }
-  const openNew = () => { const n = new URLSearchParams(params); n.set('new', '1'); setParams(n, { replace: true }) }
+  const openNew = () => update('new', '1', false)
+  const closeForm = () => { setEditing(null); update('new', '', false) }
 
-  const dueText = (m: MaintenanceWithRefs) => {
-    if (m.status !== 'terjadwal') return null
-    const d = daysBetween(today, m.scheduled_date)
-    if (d < 0) return `Terlambat ${-d} hari`
-    if (d === 0) return 'Hari ini'
-    if (d <= 7) return `${d} hari lagi`
-    return null
-  }
+  const startComplete = (m: MaintenanceWithRefs) => { setDetail(null); setCompleting(m) }
 
   const doCancel = async () => {
     if (!cancelling) return
     try {
       const r = await cancel.mutateAsync({ id: cancelling.id, title: cancelling.title })
       toast.success(r.queued ? QUEUED_MSG : 'Jadwal dibatalkan.')
-    }
-    catch (e) { toast.error(errorMessage(e)) }
+    } catch (e) { toast.error(errorMessage(e)) }
     finally { setCancelling(null) }
   }
   const doDelete = async () => {
@@ -84,82 +110,71 @@ export default function MaintenancePage() {
     finally { setDeleting(null) }
   }
 
-  const items = data?.items ?? []
-
-  const Actions = ({ m }: { m: MaintenanceWithRefs }) => (
-    <div className="flex flex-wrap gap-2">
-      {m.status === 'terjadwal' && (
-        <>
-          <button className="btn-primary" onClick={() => setCompleting(m)}><CheckCircle2 size={18} /> Selesai</button>
-          <button className="btn-secondary" onClick={() => setEditing(m)} aria-label="Ubah jadwal"><Pencil size={18} /></button>
-          <button className="btn-secondary" onClick={() => setCancelling(m)} aria-label="Batalkan jadwal"><XCircle size={18} /></button>
-        </>
-      )}
-      {isAdmin && (
-        <button className="btn-secondary text-red-600 dark:text-red-400" onClick={() => setDeleting(m)} aria-label="Hapus"><Trash2 size={18} /></button>
-      )}
-    </div>
-  )
+  const c = counts.data
+  const options = [
+    { value: 'upcoming' as const, label: 'Terjadwal', count: c?.scheduled },
+    { value: 'overdue' as const, label: 'Terlambat', count: c?.overdue },
+    { value: 'done' as const, label: 'Selesai', count: c?.done },
+    { value: 'all' as const, label: 'Semua', count: c?.total },
+  ]
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Perawatan</h1>
-        {canEdit && <button className="btn-primary" onClick={openNew}><Plus size={18} /> Jadwalkan</button>}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Perawatan</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Kelola jadwal, pekerjaan, dan riwayat perawatan aset.</p>
+        </div>
+        {canEdit && <button className="btn-primary" onClick={openNew}><Plus size={18} aria-hidden="true" /> Jadwalkan</button>}
       </div>
 
-      <SegmentedTabs value={tab} options={TABS} onChange={(v) => { setTab(v); setPage(1) }} />
+      <MaintSummaryCards counts={c} loading={counts.isLoading} error={counts.isError} onRetry={() => counts.refetch()} filtered={dataFilterActive} active={tab} onPick={setTab} />
 
-      {isError ? (
-        <ErrorMessage message="Data perawatan gagal dimuat." onRetry={() => refetch()} />
-      ) : isLoading ? (
-        <div className="space-y-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}</div>
-      ) : items.length === 0 ? (
-        <EmptyState icon={Wrench} title="Tidak ada data" description={EMPTY_TEXT[tab]}
-          action={canEdit && tab === 'upcoming' ? <button className="btn-primary" onClick={openNew}><Plus size={18} /> Jadwalkan Perawatan</button> : undefined} />
-      ) : (
-        <div className={isFetching ? 'opacity-70 transition-opacity' : ''}>
-          <ul className="space-y-3">
-            {items.map((m) => {
-              const st = maintDisplayStatus(m, today)
-              const due = dueText(m)
-              return (
-                <li key={m.id} className="card space-y-2 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold">{m.title}</p>
-                      <Link to={`/assets/${m.asset_id}`} className="text-sm text-slate-600 hover:underline dark:text-slate-300">
-                        {m.asset?.name ?? '-'} <span className="font-mono text-xs text-slate-600 dark:text-slate-400">({m.asset?.asset_code})</span>
-                      </Link>
-                    </div>
-                    <MaintBadge value={st} />
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Jadwal {formatDate(m.scheduled_date)}
-                    {m.completed_date && ` · Selesai ${formatDate(m.completed_date)}`}
-                    {m.interval_days ? ` · Berkala tiap ${m.interval_days} hari` : ''}
-                    {Number(m.cost) > 0 ? ` · ${formatRupiah(Number(m.cost))}` : ''}
-                    {m.performed_by ? ` · ${m.performed_by}` : ''}
-                  </p>
-                  {due && <p className={`text-xs font-semibold ${st === 'terlambat' ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>{due}</p>}
-                  {m.description && <p className="text-sm text-slate-600 dark:text-slate-300">{m.description}</p>}
-                  {canEdit && <Actions m={m} />}
-                </li>
-              )
-            })}
-          </ul>
-          <div className="mt-4"><Pagination page={page} pageSize={MAINT_PAGE_SIZE} total={data?.total ?? 0} onChange={setPage} /></div>
-        </div>
-      )}
+      <CountTabs value={tab} options={options} onChange={setTab} panelId={PANEL_ID} idPrefix="maint" label="Status perawatan" />
 
-      <MaintenanceFormModal
-        open={formOpen}
-        onClose={closeForm}
-        editing={editing}
-        presetAssetId={newParam && newParam !== '1' ? newParam : undefined}
+      <MaintToolbar
+        searchInput={searchInput}
+        onSearchInput={setSearchInput}
+        filters={raw}
+        onChange={(k, v) => update(k, k === 'sort' && v === 'auto' ? '' : v)}
+        active={filtersActive}
+        onClear={clearFilters}
       />
+
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={`maint-tab-${tab}`} tabIndex={0} className="outline-none">
+        {list.isError ? (
+          <ErrorMessage message="Data perawatan gagal dimuat. Periksa koneksi internet Anda." onRetry={() => list.refetch()} />
+        ) : list.isLoading || (list.isFetching && !list.data) ? (
+          <div className="space-y-3" aria-busy="true" aria-label="Memuat data perawatan">
+            {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+          </div>
+        ) : items.length === 0 ? (
+          <MaintEmpty tab={tab} filtered={dataFilterActive} canCreate={canEdit} onCreate={openNew} onClear={clearFilters} />
+        ) : (
+          <div className={list.isFetching ? 'opacity-70 transition-opacity motion-reduce:transition-none' : ''}>
+            <MaintList
+              items={items}
+              startIndex={(page - 1) * MAINT_PAGE_SIZE}
+              today={today}
+              canEdit={canEdit}
+              isAdmin={isAdmin}
+              onDetail={setDetail}
+              onComplete={startComplete}
+              onEdit={setEditing}
+              onCancel={setCancelling}
+              onDelete={setDeleting}
+            />
+            <div className="mt-4">
+              <Pagination page={page} pageSize={MAINT_PAGE_SIZE} total={total} onChange={(p) => update('page', p === 1 ? '' : String(p), false)} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <MaintenanceFormModal open={formOpen} onClose={closeForm} editing={editing} presetAssetId={newParam && newParam !== '1' ? newParam : undefined} />
       <CompleteModal item={completing} onClose={() => setCompleting(null)} />
-      <ConfirmDialog open={!!cancelling} title="Batalkan jadwal?" message="Jadwal ini akan ditandai Dibatalkan dan tidak muncul lagi sebagai pengingat."
+      <MaintDetailModal item={detail} today={today} canEdit={canEdit} onClose={() => setDetail(null)} onComplete={startComplete} />
+      <ConfirmDialog open={!!cancelling} title="Batalkan jadwal?" message="Jadwal ini akan ditandai Dibatalkan dan tidak dihitung sebagai terjadwal maupun terlambat."
         confirmLabel="Ya, batalkan" loading={cancel.isPending} onConfirm={doCancel} onClose={() => setCancelling(null)} />
       <ConfirmDialog open={!!deleting} danger title="Hapus data perawatan?" message="Data akan dihapus permanen dan tidak bisa dikembalikan."
         confirmLabel="Ya, hapus" loading={del.isPending} onConfirm={doDelete} onClose={() => setDeleting(null)} />

@@ -30,7 +30,7 @@ export async function prepareOffline(qc: QueryClient, onProgress: (done: number,
     qc.fetchQuery({ queryKey: ['lookups', 'locations'], queryFn: fetchLocationOptions, ...common }),
     qc.fetchQuery({ queryKey: ['lookups', 'employees'], queryFn: fetchEmployeeOptions, ...common }),
     qc.fetchQuery({ queryKey: ['loans', 'list', 'active', 1, { q: '', from: '', to: '', sort: 'newest' }], queryFn: () => fetchLoansList('active', 1), ...common }).catch(() => null),
-    qc.fetchQuery({ queryKey: ['maintenance', 'list', 'upcoming', 1], queryFn: () => fetchMaintenanceList('upcoming', 1), ...common }).catch(() => null),
+    qc.fetchQuery({ queryKey: ['maintenance', 'list', 'upcoming', 1, { q: '', from: '', to: '', sort: 'auto' }], queryFn: () => fetchMaintenanceList('upcoming', 1), ...common }).catch(() => null),
   ])
 
   const assets = await qc.fetchQuery({ queryKey: ['assets', 'portfolio'], queryFn: fetchPortfolio, ...common })
