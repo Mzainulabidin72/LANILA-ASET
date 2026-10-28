@@ -1,36 +1,24 @@
 import { supabase } from './supabase'
 import { formatDate, formatDateTime, formatRupiah } from './format'
 import { todayISO } from './dates'
+import { loanState } from './loans'
+import {
+  REPORT_LABEL, buildGroupedRows, groupAssets, periodText, reportFileName, sumPrice,
+  type AssetGroup, type AssetReportKind, type Cell, type ExportFormat, type ReportAsset, type ReportLoan,
+} from './reportData'
 import { CONDITION_LABEL, STATUS_LABEL, type AssetCondition, type AssetStatus } from '@/types/database'
+import { PHYSICAL_CLASSES } from '@/types/wealth'
 
-export type ReportKind = 'assets' | 'by_location' | 'by_condition' | 'loans'
-export const REPORT_LABEL: Record<ReportKind, string> = {
-  assets: 'Daftar Aset',
-  by_location: 'Aset per Lokasi',
-  by_condition: 'Aset per Kondisi',
-  loans: 'Riwayat Peminjaman',
-}
-export type ExportFormat = 'xlsx' | 'pdf'
+export { REPORT_LABEL }
+export type { AssetReportKind, ExportFormat, ReportAsset, ReportLoan, ReportKind } from './reportData'
 
 export interface AssetReportFilters { category: string; location: string; condition: string; status: string }
 export interface LoanReportFilters { from: string; to: string; state: '' | 'active' | 'overdue' | 'returned' }
 
-// ---------------------------------------------------------------- data
+/** Keterangan yang ikut tercetak di Excel/PDF. */
+export interface ReportMeta { filterText: string; period?: string; generatedAt?: Date }
 
-interface ReportAsset {
-  asset_code: string
-  name: string
-  category: string
-  brand: string
-  model: string
-  serial_number: string
-  acquisition_date: string | null
-  acquisition_price: number
-  location: string
-  employee: string
-  condition: AssetCondition
-  status: AssetStatus
-}
+// ---------------------------------------------------------------- data (satu sumber untuk pratinjau DAN ekspor)
 
 interface RawAsset {
   asset_code: string
@@ -49,12 +37,17 @@ interface RawAsset {
 
 const PAGE = 1000
 
-async function fetchAssets(f: AssetReportFilters): Promise<ReportAsset[]> {
+/**
+ * Laporan mencakup ASET FISIK/inventaris (properti, kendaraan, barang berharga, lainnya): hanya jenis ini yang punya
+ * lokasi dan kondisi. Aset keuangan (rekening, saham, dst.) tidak dimasukkan. RLS tetap membatasi baris yang boleh dilihat.
+ */
+export async function fetchAssetReportRows(f: AssetReportFilters): Promise<ReportAsset[]> {
   const out: ReportAsset[] = []
   for (let from = 0; ; from += PAGE) {
     let q = supabase
       .from('aset_assets')
       .select('asset_code, name, brand, model, serial_number, acquisition_date, acquisition_price, condition, status, category:aset_categories(name), location:aset_locations(name), employee:aset_employees(full_name)')
+      .in('asset_class', [...PHYSICAL_CLASSES])
     q = f.status ? q.eq('status', f.status) : q.neq('status', 'dihapus')
     if (f.category) q = q.eq('category_id', f.category)
     if (f.location) q = q.eq('location_id', f.location)
@@ -83,19 +76,6 @@ async function fetchAssets(f: AssetReportFilters): Promise<ReportAsset[]> {
   return out
 }
 
-interface ReportLoan {
-  asset_code: string
-  asset_name: string
-  employee: string
-  loan_date: string
-  due_date: string | null
-  return_date: string | null
-  state: string
-  condition_out: string
-  condition_in: string
-  notes: string
-}
-
 interface RawLoan {
   loan_date: string
   due_date: string | null
@@ -107,21 +87,23 @@ interface RawLoan {
   employee: { full_name: string } | null
 }
 
-async function fetchLoans(f: LoanReportFilters): Promise<ReportLoan[]> {
+const STATE_LABEL = { dipinjam: 'Dipinjam', terlambat: 'Terlambat', dikembalikan: 'Dikembalikan' } as const
+
+export async function fetchLoanReportRows(f: LoanReportFilters): Promise<ReportLoan[]> {
   const today = todayISO()
   const out: ReportLoan[] = []
   for (let from = 0; ; from += PAGE) {
     let q = supabase.from('aset_loans').select('loan_date, due_date, return_date, condition_out, condition_in, notes, asset:aset_assets(asset_code, name), employee:aset_employees(full_name)')
     if (f.from) q = q.gte('loan_date', f.from)
     if (f.to) q = q.lte('loan_date', f.to)
-    if (f.state === 'active') q = q.is('return_date', null)
+    // Aturan status sama dengan halaman Peminjaman (lib/loans.ts): tiga status saling lepas
+    if (f.state === 'active') q = q.is('return_date', null).or(`due_date.is.null,due_date.gte.${today}`)
     if (f.state === 'overdue') q = q.is('return_date', null).lt('due_date', today)
     if (f.state === 'returned') q = q.not('return_date', 'is', null)
     const { data, error } = await q.order('loan_date', { ascending: false }).order('id').range(from, from + PAGE - 1)
     if (error) throw error
     const rows = (data ?? []) as unknown as RawLoan[]
     for (const r of rows) {
-      const state = r.return_date ? 'Dikembalikan' : r.due_date && r.due_date < today ? 'Terlambat' : 'Dipinjam'
       out.push({
         asset_code: r.asset?.asset_code ?? '',
         asset_name: r.asset?.name ?? '',
@@ -129,7 +111,7 @@ async function fetchLoans(f: LoanReportFilters): Promise<ReportLoan[]> {
         loan_date: r.loan_date,
         due_date: r.due_date,
         return_date: r.return_date,
-        state,
+        state: STATE_LABEL[loanState(r, today)],
         condition_out: r.condition_out ? CONDITION_LABEL[r.condition_out] : '',
         condition_in: r.condition_in ? CONDITION_LABEL[r.condition_in] : '',
         notes: r.notes ?? '',
@@ -178,20 +160,35 @@ const LOAN_COLS: Col<ReportLoan>[] = [
   { key: 'notes', header: 'Catatan', width: 30, excel: (r) => r.notes, pdf: (r) => r.notes || '-' },
 ]
 
-// ---------------------------------------------------------------- pembuat file
+// ---------------------------------------------------------------- penulis berkas
 
-interface SheetSpec { name: string; header: string[]; rows: (string | number)[][]; widths: number[]; moneyCols?: number[] }
+interface SheetSpec {
+  name: string
+  /** baris keterangan di atas tabel (judul, tanggal cetak, filter, ...) */
+  meta?: Cell[][]
+  header: string[]
+  rows: Cell[][]
+  widths: number[]
+  moneyCols?: number[]
+  autofilter?: boolean
+}
 
 async function writeExcel(filename: string, sheets: SheetSpec[]) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   for (const s of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet([s.header, ...s.rows])
+    const meta = s.meta ?? []
+    const offset = meta.length ? meta.length + 1 : 0 // baris kosong pemisah setelah keterangan
+    const aoa: Cell[][] = [...meta, ...(meta.length ? [[]] : []), s.header, ...s.rows]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
     ws['!cols'] = s.widths.map((w) => ({ wch: w }))
+    if (s.autofilter && s.rows.length > 0) {
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: offset, c: 0 }, e: { r: offset + s.rows.length, c: s.header.length - 1 } }) }
+    }
     for (const c of s.moneyCols ?? []) {
-      for (let r = 1; r <= s.rows.length; r++) {
+      for (let r = offset + 1; r <= offset + s.rows.length; r++) {
         const cell = ws[XLSX.utils.encode_cell({ r, c })]
-        if (cell) cell.z = '#,##0'
+        if (cell && cell.t === 'n') cell.z = '#,##0'
       }
     }
     XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31))
@@ -232,6 +229,7 @@ async function writePdf(filename: string, title: string, subtitleLines: string[]
       body: s.body,
       startY: y,
       margin: { left: 10, right: 10, bottom: 14 },
+      showHead: 'everyPage', // judul kolom diulang di tiap halaman
       styles: { fontSize: 7.5, cellPadding: 1.6, overflow: 'linebreak', textColor: [30, 41, 59] },
       headStyles: { fillColor: [14, 116, 144], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [241, 245, 249] },
@@ -256,67 +254,62 @@ async function writePdf(filename: string, title: string, subtitleLines: string[]
   doc.save(filename)
 }
 
-const fileName = (slug: string, ext: string) => `LANILA-ASET_${slug}_${todayISO()}.${ext}`
-const stamp = () => `Dicetak: ${formatDateTime(new Date())}`
+const stamp = (d: Date) => `Dicetak: ${formatDateTime(d)}`
 
-function groupBy<T>(rows: T[], key: (r: T) => string, emptyLabel: string): [string, T[]][] {
-  const map = new Map<string, T[]>()
-  for (const r of rows) {
-    const k = key(r) || emptyLabel
-    const list = map.get(k)
-    if (list) list.push(r); else map.set(k, [r])
-  }
-  return [...map.entries()].sort(([a], [b]) => {
-    if (a === emptyLabel) return 1
-    if (b === emptyLabel) return -1
-    return a.localeCompare(b, 'id')
-  })
+function metaRows(title: string, m: ReportMeta, count: number, countLabel: string): Cell[][] {
+  const rows: Cell[][] = [
+    ['LANILA ASET'],
+    [title],
+    ['Dicetak', formatDateTime(m.generatedAt ?? new Date())],
+    ['Filter', m.filterText || 'Semua data'],
+  ]
+  if (m.period) rows.push(['Periode', m.period])
+  rows.push([countLabel, count])
+  return rows
 }
 
-const sum = (rows: ReportAsset[]) => rows.reduce((s, r) => s + r.acquisition_price, 0)
+const grouped = (k: AssetReportKind): k is 'by_location' | 'by_condition' => k !== 'assets'
 
-// ---------------------------------------------------------------- API
+// ---------------------------------------------------------------- ekspor (memakai DATA YANG SAMA dengan pratinjau)
 
-/** Mengembalikan jumlah baris. 0 = tidak ada data (file tidak dibuat). */
-export async function exportAssetReport(
-  kind: Exclude<ReportKind, 'loans'>,
-  format: ExportFormat,
-  filters: AssetReportFilters,
-  filterText: string,
-): Promise<number> {
-  const rows = await fetchAssets(filters)
-  if (rows.length === 0) return 0
-
+/** Mengekspor seluruh data yang cocok dengan filter (bukan hanya halaman pratinjau). */
+export async function exportAssetReport(kind: AssetReportKind, format: ExportFormat, rows: ReportAsset[], meta: ReportMeta): Promise<void> {
+  if (rows.length === 0) throw new Error('Tidak ada data untuk diekspor.')
+  const now = meta.generatedAt ?? new Date()
   const title = REPORT_LABEL[kind]
-  const sub = [stamp(), `Filter: ${filterText || 'Semua data'}`, `Jumlah aset: ${rows.length} | Total nilai: ${formatRupiah(sum(rows))}`]
-  const groupKey = kind === 'by_location' ? (r: ReportAsset) => r.location : kind === 'by_condition' ? (r: ReportAsset) => CONDITION_LABEL[r.condition] : null
+  const groups: AssetGroup[] | null = grouped(kind) ? groupAssets(rows, kind) : null
   const groupLabel = kind === 'by_location' ? 'Lokasi' : 'Kondisi'
-  const emptyLabel = 'Tanpa lokasi'
+  const totalLine = `Jumlah aset: ${rows.length} | Total harga perolehan: ${formatRupiah(sumPrice(rows))}`
 
   if (format === 'xlsx') {
     const header = ['No', ...ASSET_COLS.map((c) => c.header)]
     const widths = [5, ...ASSET_COLS.map((c) => c.width)]
-    const moneyCols = ASSET_COLS.map((c, i) => (c.money ? i + 1 : -1)).filter((i) => i >= 0)
-    const ordered = groupKey ? groupBy(rows, groupKey, emptyLabel).flatMap(([, g]) => g) : rows
+    const moneyIdx = ASSET_COLS.findIndex((c) => c.money) + 1
+    const moneyCols = [moneyIdx]
+    const rowOf = (r: ReportAsset, n: number): Cell[] => [n, ...ASSET_COLS.map((c) => c.excel(r))]
+
+    const data: Cell[][] = groups
+      ? buildGroupedRows(groups, { groupLabel, columns: header.length, moneyIdx, rowOf })
+      : rows.map((r, i) => rowOf(r, i + 1))
+
     const sheets: SheetSpec[] = [{
-      name: title,
-      header,
-      widths,
-      moneyCols,
-      rows: ordered.map((r, i) => [i + 1, ...ASSET_COLS.map((c) => c.excel(r))]),
+      name: title, meta: metaRows(title, { ...meta, generatedAt: now }, rows.length, 'Jumlah aset'),
+      header, rows: data, widths, moneyCols, autofilter: !groups,
     }]
-    if (groupKey) {
-      const groups = groupBy(rows, groupKey, emptyLabel)
+    if (groups) {
       sheets.push({
         name: 'Ringkasan',
-        header: [groupLabel, 'Jumlah Aset', 'Total Nilai (Rp)'],
-        widths: [28, 14, 22],
-        moneyCols: [2],
-        rows: [...groups.map(([k, g]) => [k, g.length, sum(g)] as (string | number)[]), ['TOTAL', rows.length, sum(rows)]],
+        header: [groupLabel, 'Jumlah Aset', 'Persentase (%)', 'Total Harga Perolehan (Rp)'],
+        widths: [28, 14, 16, 26],
+        moneyCols: [3],
+        rows: [
+          ...groups.map((g) => [g.label, g.count, Math.round(g.pct * 100) / 100, g.total] as Cell[]),
+          ['TOTAL', rows.length, 100, sumPrice(rows)],
+        ],
       })
     }
-    await writeExcel(fileName(kind, 'xlsx'), sheets)
-    return rows.length
+    await writeExcel(reportFileName(kind, 'xlsx', now), sheets)
+    return
   }
 
   // PDF
@@ -324,39 +317,43 @@ export async function exportAssetReport(
   const head = ['No', ...pdfCols.map((c) => c.header.replace(' (Rp)', ''))]
   const rightCols = [pdfCols.findIndex((c) => c.money) + 1]
   const toBody = (list: ReportAsset[]) => list.map((r, i) => [String(i + 1), ...pdfCols.map((c) => c.pdf(r))])
+  const sub = [stamp(now), `Filter: ${meta.filterText || 'Semua data'}`, totalLine]
 
-  const sections: PdfSection[] = groupKey
-    ? groupBy(rows, groupKey, emptyLabel).map(([k, g]) => ({
-        heading: `${groupLabel}: ${k}  -  ${g.length} aset, total ${formatRupiah(sum(g))}`,
+  const sections: PdfSection[] = groups
+    ? groups.map((g) => ({
+        heading: `${groupLabel}: ${g.label}  -  ${g.count} aset${kind === 'by_condition' ? ` (${g.pct.toFixed(1)}%)` : ''}, subtotal ${formatRupiah(g.total)}`,
         head,
-        body: toBody(g),
+        body: toBody(g.rows),
         rightCols,
       }))
     : [{ head, body: toBody(rows), rightCols }]
 
-  await writePdf(fileName(kind, 'pdf'), title, sub, sections, `Total: ${rows.length} aset  |  Nilai perolehan: ${formatRupiah(sum(rows))}`)
-  return rows.length
+  await writePdf(reportFileName(kind, 'pdf', now), title, sub, sections, `Total: ${rows.length} aset  |  Nilai perolehan: ${formatRupiah(sumPrice(rows))}`)
 }
 
-export async function exportLoanReport(format: ExportFormat, filters: LoanReportFilters, filterText: string): Promise<number> {
-  const rows = await fetchLoans(filters)
-  if (rows.length === 0) return 0
+export async function exportLoanReport(format: ExportFormat, rows: ReportLoan[], meta: ReportMeta): Promise<void> {
+  if (rows.length === 0) throw new Error('Tidak ada data untuk diekspor.')
+  const now = meta.generatedAt ?? new Date()
   const title = REPORT_LABEL.loans
-  const sub = [stamp(), `Filter: ${filterText || 'Semua data'}`, `Jumlah transaksi: ${rows.length}`]
+  const period = meta.period ?? periodText('', '')
 
   if (format === 'xlsx') {
-    await writeExcel(fileName('peminjaman', 'xlsx'), [{
+    await writeExcel(reportFileName('loans', 'xlsx', now), [{
       name: title,
+      meta: metaRows(title, { ...meta, period, generatedAt: now }, rows.length, 'Jumlah transaksi'),
       header: ['No', ...LOAN_COLS.map((c) => c.header)],
       widths: [5, ...LOAN_COLS.map((c) => c.width)],
       rows: rows.map((r, i) => [i + 1, ...LOAN_COLS.map((c) => c.excel(r))]),
+      autofilter: true,
     }])
-    return rows.length
+    return
   }
 
-  await writePdf(fileName('peminjaman', 'pdf'), title, sub, [{
-    head: ['No', ...LOAN_COLS.map((c) => c.header)],
-    body: rows.map((r, i) => [String(i + 1), ...LOAN_COLS.map((c) => c.pdf(r))]),
-  }], `Total: ${rows.length} transaksi peminjaman`)
-  return rows.length
+  await writePdf(
+    reportFileName('loans', 'pdf', now),
+    title,
+    [stamp(now), `Periode tanggal pinjam: ${period}`, `Filter: ${meta.filterText || 'Semua data'}`, `Jumlah transaksi: ${rows.length}`],
+    [{ head: ['No', ...LOAN_COLS.map((c) => c.header)], body: rows.map((r, i) => [String(i + 1), ...LOAN_COLS.map((c) => c.pdf(r))]) }],
+    `Total: ${rows.length} transaksi peminjaman`,
+  )
 }

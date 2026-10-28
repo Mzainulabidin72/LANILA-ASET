@@ -1,155 +1,200 @@
-import { useState } from 'react'
-import { FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
-import { useLookups } from '@/hooks/useAssets'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { FileSearch } from 'lucide-react'
+import { fetchCategoryOptions, fetchLocationOptions } from '@/hooks/useAssets'
 import { errorMessage } from '@/lib/errors'
-import { formatDate } from '@/lib/format'
+import { isValidRange } from '@/lib/loans'
 import {
-  REPORT_LABEL, exportAssetReport, exportLoanReport,
-  type AssetReportFilters, type ExportFormat, type LoanReportFilters, type ReportKind,
+  exportAssetReport, exportLoanReport, fetchAssetReportRows, fetchLoanReportRows,
+  type AssetReportFilters, type LoanReportFilters,
 } from '@/lib/reports'
+import { REPORT_LABEL, groupAssets, pageSlice, periodText, type ExportFormat, type ReportKind } from '@/lib/reportData'
 import { CONDITION_LABEL, STATUS_LABEL } from '@/types/database'
+import ReportFilters, { type LookupState } from '@/components/reports/ReportFilters'
+import { AssetPreview, GroupedPreview, LoanPreview } from '@/components/reports/ReportPreviews'
+import ReportSummary from '@/components/reports/ReportSummary'
+import ReportTypeCards from '@/components/reports/ReportTypeCards'
+import ErrorMessage from '@/components/ui/ErrorMessage'
+import Pagination from '@/components/ui/Pagination'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 
-const KINDS: { kind: ReportKind; desc: string }[] = [
-  { kind: 'assets', desc: 'Seluruh aset beserta detailnya.' },
-  { kind: 'by_location', desc: 'Dikelompokkan per lokasi, lengkap dengan subtotal.' },
-  { kind: 'by_condition', desc: 'Dikelompokkan per kondisi (Baik, Rusak, Hilang).' },
-  { kind: 'loans', desc: 'Catatan pinjam dan kembali, bisa dipilih rentang tanggal.' },
-]
-const LOAN_STATE_LABEL = { '': 'Semua status', active: 'Sedang dipinjam', overdue: 'Terlambat', returned: 'Sudah dikembalikan' } as const
+const KINDS: ReportKind[] = ['assets', 'by_location', 'by_condition', 'loans']
+const LOAN_STATES = ['active', 'overdue', 'returned'] as const
+const LOAN_STATE_LABEL = { active: 'Sedang dipinjam', overdue: 'Terlambat', returned: 'Sudah dikembalikan' } as const
+const PREVIEW_PAGE = 20
+const STALE = 30_000
+
+const asLookup = (q: { data: { id: string; name: string }[] | undefined; isLoading: boolean; isError: boolean; refetch: () => unknown }): LookupState => ({
+  data: q.data, isLoading: q.isLoading, isError: q.isError, refetch: () => { void q.refetch() },
+})
 
 export default function ReportsPage() {
   const toast = useToast()
-  const { categories, locations } = useLookups()
-  const [kind, setKind] = useState<ReportKind>('assets')
-  const [af, setAf] = useState<AssetReportFilters>({ category: '', location: '', condition: '', status: '' })
-  const [lf, setLf] = useState<LoanReportFilters>({ from: '', to: '', state: '' })
+  const [params, setParams] = useSearchParams()
   const [busy, setBusy] = useState<ExportFormat | null>(null)
 
-  const describeFilters = (): string => {
-    if (kind === 'loans') {
-      const p: string[] = []
-      if (lf.from) p.push(`dari ${formatDate(lf.from)}`)
-      if (lf.to) p.push(`sampai ${formatDate(lf.to)}`)
-      if (lf.state) p.push(LOAN_STATE_LABEL[lf.state])
-      return p.join(', ')
+  // Filter disimpan di URL. Laporan aset dan peminjaman memakai filter masing-masing; yang tidak relevan tidak pernah dipakai.
+  const kindParam = params.get('kind') as ReportKind | null
+  const kind: ReportKind = kindParam && KINDS.includes(kindParam) ? kindParam : 'assets'
+  const family = kind === 'loans' ? 'loans' : 'assets'
+  const page = Math.max(1, Number(params.get('page')) || 1)
+
+  const condParam = params.get('cond') ?? ''
+  const statusParam = params.get('status') ?? ''
+  const stateParam = params.get('lstate') ?? ''
+  const assetFilters: AssetReportFilters = useMemo(() => ({
+    category: params.get('cat') ?? '',
+    location: params.get('loc') ?? '',
+    condition: condParam in CONDITION_LABEL ? condParam : '',
+    status: statusParam in STATUS_LABEL ? statusParam : '',
+  }), [params, condParam, statusParam])
+  const loanFilters: LoanReportFilters = useMemo(() => ({
+    from: params.get('from') ?? '',
+    to: params.get('to') ?? '',
+    state: (LOAN_STATES as readonly string[]).includes(stateParam) ? (stateParam as LoanReportFilters['state']) : '',
+  }), [params, stateParam])
+  const rangeOk = isValidRange(loanFilters.from, loanFilters.to)
+
+  const update = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value); else next.delete(key)
+    next.delete('page')
+    setParams(next, { replace: true })
+  }
+  const setKind = (k: ReportKind) => update('kind', k === 'assets' ? '' : k)
+
+  // Opsi filter dari server (kunci sama dengan useLookups, jadi tidak diambil dua kali)
+  const categories = useQuery({ queryKey: ['lookups', 'categories'], queryFn: fetchCategoryOptions, staleTime: 5 * 60_000 })
+  const locations = useQuery({ queryKey: ['lookups', 'locations'], queryFn: fetchLocationOptions, staleTime: 5 * 60_000 })
+
+  // Satu sumber data: dipakai pratinjau DAN ekspor. Tiga laporan aset berbagi satu query (pengelompokan dilakukan di klien).
+  const assetsQ = useQuery({ queryKey: ['reports', 'assets', assetFilters], enabled: family === 'assets', staleTime: STALE, queryFn: () => fetchAssetReportRows(assetFilters) })
+  const loansQ = useQuery({ queryKey: ['reports', 'loans', loanFilters], enabled: family === 'loans' && rangeOk, staleTime: STALE, queryFn: () => fetchLoanReportRows(loanFilters) })
+  const active = family === 'loans' ? loansQ : assetsQ
+  const assetRows = assetsQ.data
+  const loanRows = loansQ.data
+  const rows = family === 'loans' ? loanRows : assetRows
+  const total = rows?.length ?? 0
+
+  const groups = useMemo(
+    () => (assetRows && (kind === 'by_location' || kind === 'by_condition') ? groupAssets(assetRows, kind) : null),
+    [assetRows, kind],
+  )
+
+  // Ringkasan filter aktif (chip) dan teks untuk berkas
+  const chips: string[] = useMemo(() => {
+    if (family === 'loans') {
+      const c: string[] = []
+      if (loanFilters.from || loanFilters.to) c.push(`Tanggal: ${periodText(loanFilters.from, loanFilters.to)}`)
+      if (loanFilters.state) c.push(`Status: ${LOAN_STATE_LABEL[loanFilters.state]}`)
+      return c
     }
-    const p: string[] = []
-    if (af.category) p.push(`Kategori ${categories.find((c) => c.id === af.category)?.name ?? ''}`)
-    if (af.location && kind !== 'by_location') p.push(`Lokasi ${locations.find((l) => l.id === af.location)?.name ?? ''}`)
-    if (af.condition && kind !== 'by_condition') p.push(`Kondisi ${CONDITION_LABEL[af.condition as keyof typeof CONDITION_LABEL]}`)
-    if (af.status) p.push(`Status ${STATUS_LABEL[af.status as keyof typeof STATUS_LABEL]}`)
-    return p.join(', ')
+    const c: string[] = []
+    if (assetFilters.category) c.push(`Kategori: ${categories.data?.find((x) => x.id === assetFilters.category)?.name ?? '...'}`)
+    if (assetFilters.location) c.push(`Lokasi: ${locations.data?.find((x) => x.id === assetFilters.location)?.name ?? '...'}`)
+    if (assetFilters.condition) c.push(`Kondisi: ${CONDITION_LABEL[assetFilters.condition as keyof typeof CONDITION_LABEL]}`)
+    if (assetFilters.status) c.push(`Status: ${STATUS_LABEL[assetFilters.status as keyof typeof STATUS_LABEL]}`)
+    return c
+  }, [family, loanFilters, assetFilters, categories.data, locations.data])
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(params)
+    for (const k of family === 'loans' ? ['from', 'to', 'lstate'] : ['cat', 'loc', 'cond', 'status']) next.delete(k)
+    next.delete('page')
+    setParams(next, { replace: true })
   }
 
+  const slice = family === 'loans' ? pageSlice(loanRows ?? [], page, PREVIEW_PAGE) : kind === 'assets' ? pageSlice(assetRows ?? [], page, PREVIEW_PAGE) : null
+  const canExport = !active.isLoading && !active.isError && !active.isFetching && total > 0
+
   const run = async (format: ExportFormat) => {
-    if (kind === 'loans' && lf.from && lf.to && lf.from > lf.to) {
-      toast.error('Tanggal awal tidak boleh setelah tanggal akhir.')
-      return
-    }
+    if (busy || !canExport) return
     setBusy(format)
     try {
-      const text = describeFilters()
-      const n = kind === 'loans'
-        ? await exportLoanReport(format, lf, text)
-        : await exportAssetReport(kind, format, af, text)
-      if (n === 0) toast.error('Tidak ada data yang cocok dengan filter ini.')
-      else toast.success(`Laporan berhasil dibuat (${n} baris).`)
+      const meta = { filterText: chips.join(', '), generatedAt: new Date() }
+      if (kind === 'loans') {
+        await exportLoanReport(format, loanRows ?? [], { ...meta, period: periodText(loanFilters.from, loanFilters.to) })
+      } else {
+        await exportAssetReport(kind, format, assetRows ?? [], meta)
+      }
+      toast.success(`Berkas ${format === 'xlsx' ? 'Excel' : 'PDF'} dibuat dengan ${total} data. Periksa folder unduhan Anda.`)
     } catch (e) {
-      toast.error(errorMessage(e, 'Laporan gagal dibuat. Coba lagi.'))
+      toast.error(errorMessage(e, 'Berkas gagal dibuat. Coba lagi.'))
     } finally {
       setBusy(null)
     }
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Laporan</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400">Pilih jenis laporan, atur filter, lalu unduh sebagai Excel atau PDF.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Pilih jenis laporan, atur filter, lalu tinjau dan unduh hasilnya.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Jenis laporan">
-        {KINDS.map((k) => (
-          <button
-            key={k.kind}
-            role="radio"
-            aria-checked={kind === k.kind}
-            onClick={() => setKind(k.kind)}
-            className={`card min-h-[44px] p-4 text-left transition ${kind === k.kind ? '!border-brand-600 ring-2 ring-brand-600/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
-          >
-            <p className="font-semibold">{REPORT_LABEL[k.kind]}</p>
-            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">{k.desc}</p>
-          </button>
-        ))}
-      </div>
+      <ReportTypeCards value={kind} onChange={setKind} />
 
-      <section className="card space-y-4 p-4 sm:p-5">
-        <h2 className="text-sm font-semibold">Filter</h2>
-        {kind === 'loans' ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <label htmlFor="from" className="label">Dari tanggal</label>
-              <input id="from" type="date" className="input" value={lf.from} onChange={(e) => setLf({ ...lf, from: e.target.value })} />
-            </div>
-            <div>
-              <label htmlFor="to" className="label">Sampai tanggal</label>
-              <input id="to" type="date" className="input" value={lf.to} onChange={(e) => setLf({ ...lf, to: e.target.value })} />
-            </div>
-            <div>
-              <label htmlFor="state" className="label">Status</label>
-              <select id="state" className="input" value={lf.state} onChange={(e) => setLf({ ...lf, state: e.target.value as LoanReportFilters['state'] })}>
-                {Object.entries(LOAN_STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="f-cat" className="label">Kategori</label>
-              <select id="f-cat" className="input" value={af.category} onChange={(e) => setAf({ ...af, category: e.target.value })}>
-                <option value="">Semua kategori</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            {kind !== 'by_location' && (
-              <div>
-                <label htmlFor="f-loc" className="label">Lokasi</label>
-                <select id="f-loc" className="input" value={af.location} onChange={(e) => setAf({ ...af, location: e.target.value })}>
-                  <option value="">Semua lokasi</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </div>
-            )}
-            {kind !== 'by_condition' && (
-              <div>
-                <label htmlFor="f-cond" className="label">Kondisi</label>
-                <select id="f-cond" className="input" value={af.condition} onChange={(e) => setAf({ ...af, condition: e.target.value })}>
-                  <option value="">Semua kondisi</option>
-                  {Object.entries(CONDITION_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-            )}
-            <div>
-              <label htmlFor="f-status" className="label">Status</label>
-              <select id="f-status" className="input" value={af.status} onChange={(e) => setAf({ ...af, status: e.target.value })}>
-                <option value="">Semua status aktif</option>
-                {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
+      <ReportFilters
+        family={family}
+        asset={assetFilters}
+        loan={loanFilters}
+        categories={asLookup(categories)}
+        locations={asLookup(locations)}
+        onAsset={(k, v) => update({ category: 'cat', location: 'loc', condition: 'cond', status: 'status' }[k], v)}
+        onLoan={(k, v) => update(k === 'state' ? 'lstate' : k, v)}
+        activeCount={chips.length}
+        onClear={clearFilters}
+      />
 
-        <div className="flex flex-col gap-3 pt-1 sm:flex-row">
-          <button className="btn-primary flex-1" onClick={() => run('xlsx')} disabled={busy !== null}>
-            {busy === 'xlsx' ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />} Unduh Excel
-          </button>
-          <button className="btn-secondary flex-1" onClick={() => run('pdf')} disabled={busy !== null}>
-            {busy === 'pdf' ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />} Unduh PDF
-          </button>
+      {family === 'loans' && !rangeOk ? (
+        <p className="card p-4 text-sm text-slate-700 dark:text-slate-300">Laporan akan tampil setelah rentang tanggal diperbaiki.</p>
+      ) : active.isError ? (
+        <ErrorMessage message={`${errorMessage(active.error, 'Data laporan gagal dimuat.')} Berkas tidak dibuat dari data yang tidak lengkap.`} onRetry={() => active.refetch()} />
+      ) : active.isLoading ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Memuat laporan">
+          <Skeleton className="h-28 w-full" />
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
         </div>
-        <p className="text-xs text-slate-600 dark:text-slate-400">Laporan memerlukan koneksi internet karena data diambil langsung dari server.</p>
-      </section>
+      ) : (
+        <>
+          <ReportSummary
+            title={REPORT_LABEL[kind]}
+            total={total}
+            groups={groups?.length}
+            shown={slice ? { from: slice.from, to: slice.to } : undefined}
+            chips={chips}
+            period={kind === 'loans' ? periodText(loanFilters.from, loanFilters.to) : undefined}
+            updatedAt={active.dataUpdatedAt}
+            canExport={canExport}
+            busy={busy}
+            refreshing={active.isFetching}
+            onExport={run}
+            onRefresh={() => active.refetch()}
+          />
+
+          {total === 0 ? (
+            <div className="card mx-auto flex max-w-xl flex-col items-center px-6 py-8 text-center">
+              <span className="mb-3 rounded-2xl bg-brand-50 p-3 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"><FileSearch size={26} aria-hidden="true" /></span>
+              <h2 className="text-base font-semibold">Tidak ada data untuk laporan ini</h2>
+              <p className="mt-1 max-w-sm text-sm text-slate-600 dark:text-slate-400">Filter yang dipilih mungkin tidak cocok dengan data apa pun.</p>
+              {chips.length > 0 && <button className="btn-secondary mt-4" onClick={clearFilters}>Hapus filter</button>}
+            </div>
+          ) : (
+            <div className={active.isFetching ? 'opacity-70 transition-opacity motion-reduce:transition-none' : ''}>
+              {kind === 'assets' && slice && <AssetPreview rows={(slice.items as typeof assetRows) ?? []} />}
+              {(kind === 'by_location' || kind === 'by_condition') && groups && <GroupedPreview groups={groups} kind={kind} />}
+              {kind === 'loans' && slice && <LoanPreview rows={(slice.items as typeof loanRows) ?? []} startIndex={slice.from - 1} />}
+              {slice && slice.pages > 1 && (
+                <div className="mt-4">
+                  <Pagination page={slice.page} pageSize={PREVIEW_PAGE} total={slice.total} onChange={(p) => { const n = new URLSearchParams(params); if (p === 1) n.delete('page'); else n.set('page', String(p)); setParams(n, { replace: true }) }} />
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
